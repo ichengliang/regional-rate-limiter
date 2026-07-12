@@ -1,0 +1,13 @@
+# Java build output
+target/
+*.class
+
+# IDE files
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+
+# Local configuration
+.env

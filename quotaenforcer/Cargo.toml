@@ -4,15 +4,31 @@ version = "0.1.0"
 edition = "2021"
 description = "Data plane (RateLimiter service) for the Regional Rate Limiter — see design/quotaenforcer.md"
 
+[lib]
+name = "quotaenforcer"
+path = "src/lib.rs"
+
 [[bin]]
 name = "quotaenforcer"
 path = "src/main.rs"
 
 [dependencies]
 tonic = "0.12"
+tonic-reflection = "0.12"
 prost = "0.13"
 prost-types = "0.13"
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "signal"] }
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager", "script"] }
+deadpool-postgres = "0.14"
+tokio-postgres = "0.7"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+rand = "0.8"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [build-dependencies]
 tonic-build = "0.12"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }

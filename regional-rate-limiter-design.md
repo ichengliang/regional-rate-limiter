@@ -380,7 +380,8 @@ cap). **Edge case:** a refund arriving after the window it belongs to has reset
 would credit the *new* window. We treat refunds as best-effort and
 window-scoped; a refund for an expired window is a no-op-ish over-credit that the
 floor bounds. Acceptable given windows are short relative to request lifetimes;
-called out as an open question (§18) for the month window.
+for the month window this over-credit is explicitly accepted, not fixed
+(§18, decision 1).
 
 ### 6.6 Why Lua / server-side atomicity
 
@@ -678,26 +679,33 @@ and it does so predictably (freshness → enforcement, in that order). This is t
 
 ---
 
-## 18. Open Questions
+## 18. Resolved Decisions
 
-1. **Month-window refunds** that cross the reset boundary — over-credit is
-   floored but semantically fuzzy. Do any producers need exact monthly refunds?
-2. **Global caps** — is per-region enforcement acceptable to customers, or do we
-   need reconciliation (§11.2) in v1?
-3. **Config propagation SLA** — how fast must a limit change take effect
-   region-wide? Drives cache TTL vs. push-invalidation choice.
-4. **Weighted / hierarchical limits** (per-customer *and* per-org *and*
-   per-endpoint in one call) — batch API covers the mechanics; do we need
-   atomic all-or-nothing across the set?
-5. **Default deadline** — is a single global 5 ms deadline right for all
-   producers, or do a few need to tune it?
-6. **Reducing SQL-DB (config) load** — *future work.* Today every config-cache
-   miss resolves the limit from Postgres (§6.2). The in-process cache already
-   absorbs nearly all reads, but as the tenant/limit count grows we'll want to
-   push further, e.g. a shared read-through cache tier in front of Postgres,
-   read replicas, bulk/preloaded config snapshots per service, or co-locating the
-   resolved cap in the counter key (`{limit, consumed}`) to make Redis
-   self-sufficient. Deferred — the current caching is sufficient for launch.
+The questions raised during design review are now resolved. Item numbers are
+stable (referenced elsewhere, e.g. §6.5 and the component docs).
+
+1. **Month-window refunds across a reset boundary — ACCEPTED as-is.** We do
+   **not** implement exact monthly refunds. A refund that lands after its window
+   reset over-credits the new window; this is bounded by the refund floor (§6.5)
+   and is embarrassing but not a correctness blocker. No further work.
+2. **Global caps — PER-REGION ONLY.** Enforcement stays per-region (§11); there
+   is **no** cross-region reconciliation in this version. A customer spanning *N*
+   regions can consume up to *N×* the cap globally — documented and accepted.
+   Reconciliation (§11, option 2) remains a future option, not built now.
+3. **Config propagation SLA — ≤ 5 seconds.** A limit change must take effect
+   region-wide within **5 s**. This sets the change-feed poll interval plus
+   `LISTEN/NOTIFY` push (§12.4); `quotamgmt` carries it as a propagation-lag SLO.
+4. **Weighted / hierarchical limits — OUT OF SCOPE.** Not pursued in this
+   version; deferred to a future design. The batch API mechanics exist, but
+   cross-limit atomic all-or-nothing is explicitly not built now.
+5. **Default deadline — SINGLE GLOBAL 5 ms.** One global 5 ms deadline applies to
+   all producers (§9); no per-limit tuning in this version.
+6. **Reducing SQL-DB (config) load — FUTURE WORK.** The in-process config cache
+   (§6.2) is sufficient for launch. As tenant/limit count grows we'll push
+   further — a shared read-through cache tier in front of Postgres, read replicas,
+   bulk/preloaded config snapshots per service, or co-locating the resolved cap in
+   the counter key (`{limit, consumed}`) to make Redis self-sufficient. Deferred,
+   not built now.
 
 ---
 
@@ -852,7 +860,9 @@ CREATE TRIGGER trg_limit_config_audit
   polling the audit feed — `SELECT ... FROM limit_config_audit WHERE changed_at
   > :last_seen` (indexed) → reload the touched `config_id`s — and/or
   `LISTEN/NOTIFY` push (§12.4). Since updates are rare, a periodic full reload is
-  also viable.
+  also viable. Target: a change takes effect region-wide within **≤ 5 s**
+  (§18, decision 3), so the poll interval is a few seconds with push to shorten
+  the tail.
 - **No optimistic-concurrency column.** Config writes are rare (per service /
   customer / limit) and Postgres gives strong consistency, so a plain
   transactional `UPDATE` is sufficient — no `version`/CAS needed.

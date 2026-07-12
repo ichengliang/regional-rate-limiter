@@ -21,10 +21,23 @@ dependencies {
     implementation "io.grpc:grpc-netty-shaded:${grpcVersion}"
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
+    // Server reflection so clients (e.g. grpcurl) can discover the API without
+    // local .proto files. Dev convenience; harmless in prod.
+    implementation "io.grpc:grpc-services:${grpcVersion}"
     implementation "com.google.protobuf:protobuf-java:${protobufVersion}"
+    // JsonFormat / Struct conversion for audit old_row/new_row (JSONB -> google.protobuf.Struct).
+    implementation "com.google.protobuf:protobuf-java-util:${protobufVersion}"
     // Needed by gRPC-generated code (@javax.annotation.Generated) on Java 9+.
     implementation 'javax.annotation:javax.annotation-api:1.3.2'
+    // Postgres (source of truth) + connection pool (§9.1).
+    implementation 'org.postgresql:postgresql:42.7.4'
+    implementation 'com.zaxxer:HikariCP:5.1.0'
+    implementation 'org.slf4j:slf4j-api:2.0.13'
     runtimeOnly 'org.slf4j:slf4j-simple:2.0.13'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.3'
+    testImplementation "io.grpc:grpc-inprocess:${grpcVersion}"
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.3'
 }
 
 // Compile the shared protos from ../proto. google/protobuf/{struct,timestamp}.proto
@@ -53,6 +66,17 @@ protobuf {
             }
         }
     }
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat = 'full'
+    }
+    // Integration tests need a reachable Postgres. Config via env (PG*) with
+    // localhost/postgres defaults; see QuotaMgmtTestDb.
+    systemProperty 'quotamgmt.it.enabled', System.getProperty('quotamgmt.it.enabled', 'true')
 }
 
 application {

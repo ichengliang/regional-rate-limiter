@@ -1,0 +1,116 @@
+syntax = "proto3";
+
+// Control-plane API. Implemented by quotamgmt (Java). Callers: quotaui BFF and
+// programmatic clients. The data plane obtains config via quotamgmt's read path
+// + change-feed, not these RPCs. See design/quotamgmt.md §3.
+package quotamgmt.v1;
+
+import "quota/common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+option java_package = "com.anthropic.quotamgmt.v1";
+option java_multiple_files = true;
+
+service LimitAdmin {
+  rpc CreateLimit(CreateLimitRequest) returns (CreateLimitResponse);
+  rpc UpdateLimit(UpdateLimitRequest) returns (UpdateLimitResponse);
+  rpc DeleteLimit(DeleteLimitRequest) returns (DeleteLimitResponse);
+  rpc GetLimit(GetLimitRequest) returns (GetLimitResponse);
+  rpc ListLimits(ListLimitsRequest) returns (ListLimitsResponse);
+
+  rpc RegisterService(RegisterServiceRequest) returns (RegisterServiceResponse);
+  rpc GetService(GetServiceRequest) returns (GetServiceResponse);
+  rpc ListServices(ListServicesRequest) returns (ListServicesResponse);
+
+  rpc ListAuditEntries(ListAuditEntriesRequest) returns (ListAuditEntriesResponse);
+}
+
+message Limit {
+  quota.common.v1.LimitKey key = 1;
+  int64 limit_value = 2;                 // the cap; >= 0
+  quota.common.v1.TimeUnit time_unit = 3;
+  int64 config_id = 4;                    // limit_config.id; server-assigned, read-only
+}
+
+message CreateLimitRequest {
+  quota.common.v1.LimitKey key = 1;       // customer_id may be "*"
+  int64 limit_value = 2;
+  quota.common.v1.TimeUnit time_unit = 3;
+}
+message CreateLimitResponse { Limit limit = 1; }
+
+message UpdateLimitRequest {
+  quota.common.v1.LimitKey key = 1;       // key is immutable; identifies the row
+  int64 limit_value = 2;
+  quota.common.v1.TimeUnit time_unit = 3;
+  bool create_if_absent = 4;              // optional upsert
+}
+message UpdateLimitResponse { Limit limit = 1; }
+
+message DeleteLimitRequest {
+  quota.common.v1.LimitKey key = 1;
+  bool allow_missing = 2;                 // if true, deleting a non-existent row is OK
+}
+message DeleteLimitResponse {}
+
+message GetLimitRequest {
+  quota.common.v1.LimitKey key = 1;
+  bool resolve = 2;                       // if true and exact row absent, return the '*' default
+}
+message GetLimitResponse {
+  Limit limit = 1;
+  bool is_default = 2;                    // true if the returned row is the '*' default
+}
+
+message ListLimitsRequest {
+  string service_name = 1;                // required (tenant/RBAC scope)
+  string customer_id = 2;                 // optional filter; "*" lists only defaults
+  string rate_limit_id = 3;               // optional filter
+  int32 page_size = 4;                    // default 100, max 1000
+  string page_token = 5;                  // opaque keyset cursor
+}
+message ListLimitsResponse {
+  repeated Limit limits = 1;
+  string next_page_token = 2;
+}
+
+message ServiceInfo {
+  string service_name = 1;                // primary key; immutable
+  string display_name = 2;
+  string owner = 3;                       // team/identity that owns this service's limits
+}
+message RegisterServiceRequest { ServiceInfo service = 1; }
+message RegisterServiceResponse { ServiceInfo service = 1; }
+message GetServiceRequest { string service_name = 1; }
+message GetServiceResponse { ServiceInfo service = 1; }
+message ListServicesRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+message ListServicesResponse {
+  repeated ServiceInfo services = 1;
+  string next_page_token = 2;
+}
+
+message AuditEntry {
+  int64 audit_id = 1;
+  int64 config_id = 2;
+  string operation = 3;                   // INSERT | UPDATE | DELETE
+  google.protobuf.Struct old_row = 4;     // value before (unset on INSERT)
+  google.protobuf.Struct new_row = 5;     // value after  (unset on DELETE)
+  string changed_by = 6;
+  google.protobuf.Timestamp changed_at = 7;
+}
+message ListAuditEntriesRequest {
+  string service_name = 1;                // tenant scope; required
+  quota.common.v1.LimitKey key = 2;       // optional: history for one tuple
+  int64 config_id = 3;                    // optional: history for one config_id
+  google.protobuf.Timestamp since = 4;    // optional lower bound on changed_at
+  int32 page_size = 5;
+  string page_token = 6;
+}
+message ListAuditEntriesResponse {
+  repeated AuditEntry entries = 1;
+  string next_page_token = 2;
+}

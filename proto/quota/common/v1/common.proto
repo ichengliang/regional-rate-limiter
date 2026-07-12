@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+// Shared types used by both quotamgmt and quotaenforcer.
+package quota.common.v1;
+
+option java_package = "com.anthropic.quota.common.v1";
+option java_multiple_files = true;
+
+// Reset-window unit for a fixed-window limit. Mirrors the Postgres time_unit enum.
+enum TimeUnit {
+  TIME_UNIT_UNSPECIFIED = 0; // invalid on write
+  MINUTE = 1;
+  DAY = 2;
+  MONTH = 3;
+}
+
+// Identity of a limit: (service_name, customer_id, rate_limit_id).
+// customer_id = "*" denotes the per-(service, rate_limit_id) default.
+message LimitKey {
+  string service_name = 1;
+  string customer_id = 2;
+  string rate_limit_id = 3;
+}

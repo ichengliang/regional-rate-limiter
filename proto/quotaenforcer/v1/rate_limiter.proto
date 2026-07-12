@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+// Data-plane API. Implemented by quotaenforcer (Rust). Hot path: producers call
+// via the SDK. GetUsage is the read-only API quotaui uses for live usage.
+// See design/quotaenforcer.md §3.
+package quotaenforcer.v1;
+
+import "quota/common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option java_package = "com.anthropic.quotaenforcer.v1";
+option java_multiple_files = true;
+
+service RateLimiter {
+  rpc CheckQuota(CheckQuotaRequest) returns (CheckQuotaResponse);
+  rpc CheckQuotaBatch(CheckQuotaBatchRequest) returns (CheckQuotaBatchResponse);
+  rpc Charge(ChargeRequest) returns (ChargeResponse);
+  rpc Refund(RefundRequest) returns (RefundResponse);
+  rpc GetUsage(GetUsageRequest) returns (GetUsageResponse); // read-only; for quotaui
+}
+
+message CheckQuotaRequest {
+  quota.common.v1.LimitKey key = 1;
+  int64 cost = 2;                         // defaults to 1 if 0/unset
+}
+// Self-contained per key: batched keys can have different windows, so each
+// result carries its own reset_at (design/quotaenforcer.md §3.5, §6.4).
+message CheckQuotaResponse {
+  bool allowed = 1;
+  int64 remaining = 2;                    // may be negative (design §6.4)
+  int64 limit = 3;
+  google.protobuf.Timestamp reset_at = 4;
+}
+
+message CheckQuotaBatchRequest { repeated CheckQuotaRequest requests = 1; }
+message CheckQuotaBatchResponse { repeated CheckQuotaResponse results = 1; }
+
+message ChargeRequest {
+  quota.common.v1.LimitKey key = 1;
+  int64 cost = 2;
+  string request_id = 3;                  // tracing/debugging only; NOT deduped
+}
+message ChargeResponse {
+  int64 remaining = 1;                    // may be negative
+  int64 limit = 2;
+  google.protobuf.Timestamp reset_at = 3;
+}
+
+message RefundRequest {
+  quota.common.v1.LimitKey key = 1;
+  int64 amount = 2;
+  string request_id = 3;                  // tracing only
+}
+message RefundResponse {
+  int64 remaining = 1;
+  int64 limit = 2;
+  google.protobuf.Timestamp reset_at = 3;
+}
+
+message GetUsageRequest { quota.common.v1.LimitKey key = 1; }
+message GetUsageResponse {
+  int64 consumed = 1;
+  int64 remaining = 2;
+  int64 limit = 3;
+  google.protobuf.Timestamp reset_at = 4;
+  bool configured = 5;                    // false => unconfigured (allow / unlimited)
+}

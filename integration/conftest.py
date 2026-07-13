@@ -34,6 +34,7 @@ PG_HOST, PG_PORT = "127.0.0.1", 55432
 REDIS_PORT = 56379
 QM_PORT = 18443  # quotamgmt gRPC
 QE_PORT = 18444  # quotaenforcer gRPC
+BFF_PORT = 18080  # quotaui BFF HTTP
 DEV_TOKEN = "integration-admin-token"
 
 PG_ENV = {
@@ -176,6 +177,54 @@ def qm(services):
 @pytest.fixture(scope="session")
 def qe(services):
     return qe_grpc.RateLimiterStub(grpc.insecure_channel(services["quotaenforcer"]))
+
+
+@pytest.fixture(scope="session")
+def bff(services):
+    """Build (if needed) and start the quotaui BFF against the two backends.
+
+    Passes QUOTAMGMT_TOKEN so the BFF authenticates to quotamgmt (the bearer-token
+    fix in quotaui/bff/src/grpc.ts). Yields the base URL.
+    """
+    bff_dir = REPO / "quotaui/bff"
+    if not (bff_dir / "dist/index.js").exists():
+        subprocess.run(["npm", "install", "--no-audit", "--no-fund"], cwd=bff_dir, check=True)
+        subprocess.run(["npm", "run", "build"], cwd=bff_dir, check=True)
+    env = {
+        **os.environ,
+        "PORT": str(BFF_PORT),
+        "QUOTAMGMT_ADDR": f"127.0.0.1:{QM_PORT}",
+        "QUOTAENFORCER_ADDR": f"127.0.0.1:{QE_PORT}",
+        "QUOTAMGMT_TOKEN": DEV_TOKEN,
+        "AUTH_MODE": "dev",
+        "PROTO_ROOT": str(REPO / "proto"),
+    }
+    log = open(LOGS / "bff.log", "w")
+    proc = subprocess.Popen(["node", "dist/index.js"], cwd=bff_dir, env=env, stdout=log, stderr=subprocess.STDOUT)
+    try:
+        _await_http(f"http://127.0.0.1:{BFF_PORT}/healthz", timeout=40)
+        yield f"http://127.0.0.1:{BFF_PORT}"
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
+def _await_http(url, timeout):
+    import urllib.error
+    import urllib.request
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=3) as r:
+                if r.status == 200:
+                    return
+        except (urllib.error.URLError, ConnectionError, OSError):
+            time.sleep(1)
+    raise RuntimeError(f"{url} not ready within {timeout}s")
 
 
 @pytest.fixture

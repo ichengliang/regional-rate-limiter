@@ -27,6 +27,10 @@ spec:
           env:
             - name: PORT
               value: "8080"
+            # The external LB serves plain HTTP, so the session cookie must not be
+            # Secure (a Secure cookie is dropped over HTTP). Set true behind TLS.
+            - name: COOKIE_SECURE
+              value: "false"
             - name: QUOTAMGMT_ADDR
               valueFrom: { configMapKeyRef: { name: quota-config, key: QUOTAMGMT_ADDR } }
             - name: QUOTAENFORCER_ADDR
@@ -52,6 +56,12 @@ metadata:
   namespace: ${NAMESPACE}
 spec:
   type: LoadBalancer
+  # The BFF keeps sessions in-process, so pin each client to one replica
+  # (in-memory session store, 3 replicas). externalTrafficPolicy: Local preserves
+  # the real client IP so ClientIP affinity is stable. A shared session store
+  # (e.g. Redis) would remove the need for stickiness — noted as a follow-up.
+  externalTrafficPolicy: Local
+  sessionAffinity: ClientIP
   selector: { app: quotaui }
   ports:
     - { name: http, port: 80, targetPort: 8080, protocol: TCP }

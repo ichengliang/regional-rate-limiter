@@ -39,10 +39,17 @@ Python + pytest drive the two gRPC services and the BFF's HTTP API;
 > every BFF→quotamgmt call would have been rejected `UNAUTHENTICATED` — a gap its
 > own mock-server unit tests couldn't see, and this suite does.
 
-**Known gap (documented, not gate-blocking):** `test_update_propagates_within_sla`
-is **xfail** — updating an *already-cached* cap is TTL-bound (~30s) until
-quotaenforcer's deferred audit change-feed poller lands (its README / design
-§5.4). New-limit propagation already meets the SLA.
+**Update propagation (accepted ~30s behavior):**
+`test_update_of_cached_cap_propagates_within_ttl` verifies that updating an
+*already-cached* cap propagates within quotaenforcer's positive-cache TTL (~30s +
+jitter). This is the **documented, accepted** TTL-based freshness — not a bug — see
+quotaenforcer's README "Config propagation & freshness". New-limit propagation is
+faster (~5s). The test is marked `slow` and **deselected by default**; run it with:
+
+```sh
+./run.sh -m slow        # just the slow test(s)
+./run.sh -m ""          # everything, including slow
+```
 
 ## Prerequisites
 

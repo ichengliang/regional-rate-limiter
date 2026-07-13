@@ -5,8 +5,14 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 require_cmd docker gcloud terraform
 load_env
 
-log "Configuring docker auth for ${REGISTRY%%/*} ..."
-gcloud auth configure-docker "${REGISTRY%%/*}" --quiet
+REGISTRY_HOST="${REGISTRY%%/*}"
+log "Authenticating docker to $REGISTRY_HOST ..."
+# Install the credential helper AND do a direct token login. The token login is
+# the reliable path — it doesn't depend on the helper being on PATH or on which
+# ~/.docker/config.json docker reads (e.g. under sudo).
+gcloud auth configure-docker "$REGISTRY_HOST" --quiet
+gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin "https://$REGISTRY_HOST" \
+  || die "docker login to $REGISTRY_HOST failed — is 'gcloud auth login' done and does the account have roles/artifactregistry.writer? (also: don't run this under sudo)"
 
 build_push() {
   local name="$1" dockerfile="$2" image="$3"

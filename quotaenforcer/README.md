@@ -24,6 +24,29 @@ The Lua script bodies in `store.rs` are reproduced from
 [`schema/redis_scripts.lua`](../schema/redis_scripts.lua) — **that file is the
 source of truth**; keep the two in sync.
 
+## Config propagation & freshness
+
+The cap comes from `quotamgmt`'s Postgres config, resolved through an in-process
+read-through cache ([`config.rs`](src/config.rs)). How fast a config change reaches
+the data plane is bounded by that cache's TTL ([`settings.rs`](src/settings.rs)):
+
+| Config change | Propagates within | Why |
+|---------------|-------------------|-----|
+| **New** limit for a not-yet-seen `(svc, cust, rlid)` | **~5 s** | the earlier miss was *negative*-cached (`config_negative_ttl` 5 s + jitter). |
+| Unconfigured → allow correction | ~5 s | same negative-cache expiry. |
+| **Update / delete** of an already-cached cap | **~30 s** | the positive entry lives out its TTL (`config_positive_ttl` 30 s + jitter) before it re-resolves. |
+
+This TTL-based freshness is a **deliberate, accepted tradeoff**, not a gap: config
+changes are rare relative to hot-path QPS, and taking up to ~30 s to pick up a cap
+*change* is operationally fine — in exchange we get a dead-simple cache with no
+extra moving parts (no poller, no invalidation bus). Deployments that want a
+different bound can tune `config_positive_ttl` / `config_negative_ttl` in
+`settings.rs` (lower TTL = fresher, at the cost of more config-DB reads).
+
+A tighter (≤5 s) guarantee on *updates* would come from the design's audit
+change-feed poller (§5.4), listed below as an optional optimization — it is
+intentionally not built here; the ~30 s TTL bound is the supported behavior today.
+
 ## Out of scope here (deferred / producer-side)
 
 Per the design, several pieces live in the producer or are opt-in; they are **not**
@@ -33,8 +56,11 @@ implemented in this service tier and are noted for follow-up:
   connection pool, batch coalescing, and token-lease. The deadline and the final
   fail-open *synthesis* are the SDK's job; this tier surfaces `UNAVAILABLE` /
   `INVALID_ARGUMENT` for the SDK to fail open on.
-- **Audit change-feed poller** (§5.4): cache refresh here is TTL-driven; the
-  `limit_config_audit` poll / `LISTEN.NOTIFY` push is future work.
+- **Audit change-feed poller** (§5.4): an *optional* optimization for tighter
+  (≤5 s) update propagation. Not built — config refresh is TTL-driven and bounded
+  as documented under "Config propagation & freshness" above (~5 s new, ~30 s
+  updates), which is the accepted behavior. The `limit_config_audit` poll /
+  `LISTEN.NOTIFY` push remains available as a future enhancement.
 - **Phase-offset** window variant (§4.6) and **Redis Cluster** topology (§4.3):
   keys are already hash-tagged (`rl:{svc|cust|rlid}:cnt:<window_id>`), so a
   cluster-aware client is a drop-in; the current client targets a single endpoint.

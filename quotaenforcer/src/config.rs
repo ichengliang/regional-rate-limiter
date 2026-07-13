@@ -6,8 +6,15 @@
 //! no row are cached as *negative* (unconfigured → allow, §5.3). When Postgres is
 //! unreachable we serve last-known-good, else fail open (§5.5).
 //!
-//! Scope note: refresh here is TTL-driven. The audit change-feed poller (§5.4)
-//! and cross-instance shared cache are deferred (see README).
+//! Freshness is TTL-driven and bounded, by design: a new/unconfigured key
+//! propagates within ~5s (`config_negative_ttl`), while an update/delete of an
+//! already-cached cap propagates within ~30s (`config_positive_ttl`, +jitter).
+//! This ~30s bound on config *changes* is a deliberate, accepted tradeoff —
+//! config writes are rare vs. hot-path QPS, so a simple TTL beats a poller/bus.
+//! Tune the TTLs in `settings.rs` for a different bound. The audit change-feed
+//! poller (§5.4) is an optional future optimization for ≤5s update propagation,
+//! not a missing requirement; a cross-instance shared cache is likewise deferred.
+//! See the README's "Config propagation & freshness".
 
 use std::collections::HashMap;
 use std::sync::Mutex;

@@ -1,0 +1,32 @@
+# Isolated infra for the cross-component integration tests.
+# Uses NON-default host ports (55432 / 56379) so it never clobbers a dev
+# Postgres/Redis you may already be running on 5432 / 6379.
+name: quota-integration
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: quota
+    ports:
+      - "55432:5432"
+    volumes:
+      # Applied on first init, inside the POSTGRES_DB database.
+      - ../schema/postgres.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d quota"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
+
+  redis:
+    image: redis:7
+    ports:
+      - "56379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 40

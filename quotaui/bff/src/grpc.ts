@@ -8,10 +8,12 @@ import { dirname, resolve } from "node:path";
 import {
   credentials,
   loadPackageDefinition,
+  InterceptingCall,
   type ChannelCredentials,
   type GrpcObject,
   type ServiceClientConstructor,
   type Client,
+  type Interceptor,
 } from "@grpc/grpc-js";
 import { loadSync } from "@grpc/proto-loader";
 
@@ -64,19 +66,40 @@ export interface BackendAddrs {
   quotamgmtAddr?: string;
   quotaenforcerAddr?: string;
   creds?: ChannelCredentials;
+  // The BFF's own service credential to quotamgmt (which requires a bearer token
+  // on every RPC). Falls back to QUOTAMGMT_TOKEN. The human actor still rides
+  // separately as x-actor metadata (see rpc.ts).
+  quotamgmtToken?: string;
+}
+
+// Injects `authorization: Bearer <token>` on every call of a client — the BFF's
+// service identity to the backend. On an insecure (dev) channel this can't be a
+// grpc CallCredential, so it's an interceptor.
+function bearerInterceptor(token: string): Interceptor {
+  return (options, nextCall) =>
+    new InterceptingCall(nextCall(options), {
+      start(metadata, listener, next) {
+        metadata.set("authorization", `Bearer ${token}`);
+        next(metadata, listener);
+      },
+    });
 }
 
 // TODO(prod): replace createInsecure() with mTLS service identity (design §7,
-// parent §16). The BFF authenticates to the backends with its own service
-// identity; the human actor is propagated as metadata (see rpc.ts).
+// parent §16). Until then the BFF authenticates to quotamgmt with a bearer token
+// (its service identity); the human actor is propagated as metadata (see rpc.ts).
 export function createBackends(addrs: BackendAddrs = {}): Backends {
   const creds = addrs.creds ?? credentials.createInsecure();
   const quotamgmtAddr =
     addrs.quotamgmtAddr ?? process.env.QUOTAMGMT_ADDR ?? "localhost:50051";
   const quotaenforcerAddr =
     addrs.quotaenforcerAddr ?? process.env.QUOTAENFORCER_ADDR ?? "localhost:50052";
+  const quotamgmtToken = addrs.quotamgmtToken ?? process.env.QUOTAMGMT_TOKEN;
+  const quotamgmtOpts = quotamgmtToken
+    ? { interceptors: [bearerInterceptor(quotamgmtToken)] }
+    : {};
   return {
-    quotamgmt: new LimitAdminCtor(quotamgmtAddr, creds),
+    quotamgmt: new LimitAdminCtor(quotamgmtAddr, creds, quotamgmtOpts),
     quotaenforcer: new RateLimiterCtor(quotaenforcerAddr, creds),
   };
 }

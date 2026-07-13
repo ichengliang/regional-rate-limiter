@@ -1,0 +1,6 @@
+[
+  { "token": "admin-tok",   "name": "ops@corp",     "platformAdmin": true },
+  { "token": "alice-tok",   "name": "alice@corp",   "editor": ["search-svc"] },
+  { "token": "bob-tok",     "name": "bob@corp",     "viewer": ["search-svc"] },
+  { "token": "billing-tok", "name": "billing-team", "editor": ["billing-svc"] }
+]

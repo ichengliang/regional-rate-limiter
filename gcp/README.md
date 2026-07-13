@@ -130,10 +130,19 @@ the quotaui console in a browser, and a load-driven HPA demo (`scripts/loadgen.s
 
 ## Tear down
 
+The deployed resources (GKE, Cloud SQL, Memorystore, load balancers) **bill
+continuously**, so tear the demo down when you're done:
+
 ```sh
 cd gcp/scripts
-./90-teardown.sh       # delete namespace (frees LBs), then terraform destroy
+./down.sh              # one command: delete namespace (frees LBs) → terraform destroy
 ```
+
+`down.sh` is the symmetric counterpart to `up.sh` — a thin wrapper around
+[`90-teardown.sh`](90-teardown.sh) (still runnable directly). It deletes the
+Kubernetes namespace **first** so GCP releases the external LoadBalancer
+forwarding rules before Terraform destroys the VPC, then runs `terraform destroy`.
+Args pass through to the underlying script.
 
 ## Notes / tradeoffs
 

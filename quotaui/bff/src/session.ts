@@ -119,7 +119,12 @@ function setSessionCookie(res: Response, session: Session): void {
   res.cookie(SESSION_COOKIE, session.id, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    // `Secure` requires HTTPS. On by default in production, but allow an explicit
+    // override for deployments that terminate TLS elsewhere — or, for the demo,
+    // serve the BFF over a plain-HTTP load balancer (COOKIE_SECURE=false).
+    secure: process.env.COOKIE_SECURE
+      ? process.env.COOKIE_SECURE === "true"
+      : process.env.NODE_ENV === "production",
     path: "/",
   });
 }

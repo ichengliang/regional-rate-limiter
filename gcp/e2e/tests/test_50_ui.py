@@ -28,7 +28,8 @@ def test_operator_reads_config_and_live_usage(qm, api, ui_url, svc_name):
 
     r = s.get(f"{ui_url}/api/limits", params={"service_name": svc_name}, timeout=10)
     assert r.status_code == 200, r.text
-    assert any(l["key"]["rate_limit_id"] == "rpm" for l in r.json().get("limits", []))
+    # The BFF flattens the limit (toLimitView): rate_limit_id is top-level.
+    assert any(l["rate_limit_id"] == "rpm" for l in r.json().get("limits", []))
 
     r = s.get(
         f"{ui_url}/api/usage",

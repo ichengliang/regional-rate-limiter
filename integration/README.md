@@ -14,6 +14,13 @@ quotamgmt (Java, gRPC)  ──writes config+audit──▶  Postgres  ──read
 Python + pytest drive the two gRPC services and the BFF's HTTP API;
 `docker-compose` provides isolated Postgres + Redis.
 
+> **This suite runs everything locally** — it builds + starts the services and
+> stands up Postgres/Redis via docker-compose on your machine. To instead test a
+> **live GCP deployment** (GKE + private Cloud SQL/Memorystore), use the sibling
+> suite in [`../gcp/e2e/`](../gcp/e2e/), which drives the deployed load balancers
+> rather than local processes. The system is **currently live on GCP** — see the
+> root [README](../README.md#running-on-gcp) and [`../gcp/README.md`](../gcp/README.md).
+
 ## What's covered
 
 **Stage A — control plane ↔ data plane**

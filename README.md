@@ -43,3 +43,54 @@ schema/           Postgres DDL + Redis Lua
 Each component directory has its own `README.md` with build/run instructions.
 The proto contracts in `proto/` are the coordination point — change them there
 and each component regenerates.
+
+## Running on GCP
+
+A full end-to-end deployment lives in **[`gcp/`](gcp/)** (GKE + private-IP Cloud
+SQL and Memorystore, 3 replicas per service behind external load balancers,
+enforcer HPA 3→10). See [`gcp/README.md`](gcp/README.md) to provision it and
+[`gcp/MANUAL_TESTING.md`](gcp/MANUAL_TESTING.md) for a manual walkthrough.
+
+> **The system is currently live on GCP** (project `quis-8-9c379`, region
+> `us-central1`). Current external endpoints:
+>
+> | Service | Endpoint |
+> |---------|----------|
+> | quotamgmt (gRPC) | `34.70.28.177:8443` |
+> | quotaenforcer (gRPC) | `34.42.142.148:8444` |
+> | quotaui (HTTP) | http://34.55.97.231/ |
+>
+> LoadBalancer IPs can change across redeploys — the test runner auto-discovers
+> them from the cluster, so you don't need to hard-code these.
+
+### Run the automated e2e tests against the live deployment
+
+The suite in [`gcp/e2e/`](gcp/e2e/) drives the deployed load balancers exactly as
+a real client would. With `kubectl` pointed at the cluster it auto-discovers the
+endpoints:
+
+```sh
+# one-time: point kubectl at the cluster
+gcloud container clusters get-credentials quota-demo-gke --region us-central1 --project quis-8-9c379
+
+cd gcp/e2e
+./run.sh                 # core suite (auto-discovers LB IPs; creates a venv + proto stubs)
+./run.sh -k enforcement  # a subset (pytest args pass through)
+./run.sh -m slow         # opt-in: drive load to trigger enforcer HPA scale-up
+```
+
+To target endpoints explicitly instead of auto-discovery, export them (the values
+`gcp/scripts/50-endpoints.sh` prints):
+
+```sh
+export QUOTAMGMT_ADDR=34.70.28.177:8443
+export QUOTAENFORCER_ADDR=34.42.142.148:8444
+export QUOTAUI_URL=http://34.55.97.231
+export QUOTAMGMT_TOKEN=quota-demo-admin-token
+cd gcp/e2e && ./run.sh
+```
+
+The suite covers reachability + fail-open, control-plane CRUD and resolution, the
+full check/charge/refund/usage lifecycle, new-limit propagation, the quotaui BFF
+(auth / RBAC / live usage), and HA (≥3 ready replicas + enforcer HPA 3→10) — all
+**17 tests currently pass** against the live cluster.

@@ -1,0 +1,248 @@
+/* Small, neutral, theme-aware design system (§7.1). Internal tool — clarity and
+   density over flourish. Light/dark via CSS custom properties. State is never
+   color-only: badges/warnings carry text + icons. */
+:root {
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #6b7280;
+  --border: #d1d5db;
+  --panel: #f8f9fb;
+  --accent: #2563eb;
+  --danger: #b91c1c;
+  --warn: #92400e;
+  --warn-bg: #fef3c7;
+  --changed-bg: #eef6ff;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a;
+    --fg: #e6e6e6;
+    --muted: #9aa3af;
+    --border: #333842;
+    --panel: #1c1f26;
+    --accent: #60a5fa;
+    --danger: #f87171;
+    --warn: #fcd34d;
+    --warn-bg: #3a2f12;
+    --changed-bg: #16263b;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color: var(--fg);
+  background: var(--bg);
+}
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 16px 48px;
+}
+h2 {
+  margin-top: 24px;
+}
+.center,
+.login {
+  max-width: 640px;
+  margin: 64px auto;
+  padding: 0 16px;
+}
+.muted {
+  color: var(--muted);
+}
+code {
+  background: var(--panel);
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin: 0 3px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 5;
+}
+.topbar nav {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+.who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+.tab {
+  background: none;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: var(--fg);
+  cursor: pointer;
+}
+.tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+  margin: 12px 0;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.field-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+input,
+select {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+button {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--fg);
+  cursor: pointer;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+.tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+button.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+button.danger {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+table.grid,
+table.diff {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+}
+.grid th,
+.grid td,
+.diff th,
+.diff td {
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  text-align: left;
+}
+.grid thead th {
+  background: var(--panel);
+  position: sticky;
+  top: 49px;
+}
+.diff tr.changed {
+  background: var(--changed-bg);
+}
+
+.badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+.badge-default {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.panel {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+.delete-box {
+  border-top: 1px dashed var(--border);
+  margin-top: 16px;
+  padding-top: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0;
+}
+.kv dt {
+  color: var(--muted);
+}
+.kv dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.op {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  overflow-x: auto;
+}
+
+.error {
+  color: var(--danger);
+}
+.warn {
+  color: var(--warn);
+  background: var(--warn-bg);
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+.notice {
+  background: var(--changed-bg);
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+.hint {
+  color: var(--muted);
+  font-style: italic;
+}

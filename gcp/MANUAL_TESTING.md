@@ -3,6 +3,25 @@
 Hands-on verification of the deployed stack. Assumes `scripts/up.sh` (or the
 numbered scripts) succeeded and `scripts/40-seed.sh` seeded `search-svc`.
 
+## Guided playground (one command)
+
+The fastest way to play with the live deployment is the narrated walkthrough
+script — it auto-discovers the endpoints, prints each command before running it,
+and pauses between steps:
+
+```sh
+cd gcp/scripts
+./demo.sh              # press Enter between steps
+DEMO_YES=1 ./demo.sh   # run straight through, no pauses
+```
+
+It covers the whole story end-to-end: list services → create a 5/min limit →
+watch it propagate → check/charge to exhaustion (**denied**) → usage → refund →
+the quotaui admin console → HA (3 replicas + enforcer HPA 3→10).
+
+The rest of this doc is the same steps done **by hand**, for when you want to
+poke at individual pieces.
+
 ## 0. Endpoints
 
 ```sh

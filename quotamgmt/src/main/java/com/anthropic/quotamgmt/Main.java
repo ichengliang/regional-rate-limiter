@@ -16,6 +16,8 @@ import com.zaxxer.hikari.HikariDataSource;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerInterceptors;
+import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
+import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.protobuf.services.ProtoReflectionServiceV1;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,16 +53,24 @@ public final class Main {
         InMemoryAuthorizer authorizer = seedAuthorizer();
 
         LimitAdminService service = new LimitAdminService(limits, services, audit, authorizer);
+
+        // gRPC health checking (grpc.health.v1.Health) for k8s grpc probes. The
+        // empty overall service is what a default probe queries.
+        HealthStatusManager health = new HealthStatusManager();
+        health.setStatus("", ServingStatus.SERVING);
+
         Server server = ServerBuilder.forPort(config.grpcPort())
                 .addService(ServerInterceptors.intercept(service, new AuthInterceptor(authorizer)))
                 // Reflection is registered without the auth interceptor so API
                 // discovery does not require a token (dev convenience).
                 .addService(ProtoReflectionServiceV1.newInstance())
+                .addService(health.getHealthService())
                 .build()
                 .start();
 
         log.info("quotamgmt listening on port {} (Postgres {})", config.grpcPort(), config.jdbcUrl());
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            health.setStatus("", ServingStatus.NOT_SERVING);
             server.shutdown();
             dataSource.close();
         }));

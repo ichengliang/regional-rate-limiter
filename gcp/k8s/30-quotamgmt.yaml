@@ -42,11 +42,11 @@ spec:
             - name: PGPASSWORD
               valueFrom: { secretKeyRef: { name: quota-secret, key: PGPASSWORD } }
           readinessProbe:
-            tcpSocket: { port: 8443 }
+            grpc: { port: 8443 }
             initialDelaySeconds: 10
             periodSeconds: 5
           livenessProbe:
-            tcpSocket: { port: 8443 }
+            grpc: { port: 8443 }
             initialDelaySeconds: 20
             periodSeconds: 10
           resources:

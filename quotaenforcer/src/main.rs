@@ -38,8 +38,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .register_encoded_file_descriptor_set(quotaenforcer::FILE_DESCRIPTOR_SET)
         .build_v1()?;
 
+    // gRPC health checking (grpc.health.v1.Health) for k8s grpc probes. Mark the
+    // named service and the empty overall service (queried by a default probe).
+    let (mut health_reporter, health_service) = tonic_health::server::health_reporter();
+    health_reporter
+        .set_serving::<RateLimiterServer<RateLimiterService>>()
+        .await;
+    health_reporter
+        .set_service_status("", tonic_health::ServingStatus::Serving)
+        .await;
+
     info!(addr = %settings.listen_addr, "quotaenforcer listening");
     Server::builder()
+        .add_service(health_service)
         .add_service(reflection)
         .add_service(RateLimiterServer::new(svc))
         .serve_with_shutdown(settings.listen_addr, async {

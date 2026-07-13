@@ -1,0 +1,69 @@
+# quotamgmt — control plane (Java gRPC). 3 replicas, external L4 LoadBalancer.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quotamgmt
+  namespace: ${NAMESPACE}
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: quotamgmt }
+  template:
+    metadata:
+      labels: { app: quotamgmt }
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: quotamgmt }
+      containers:
+        - name: quotamgmt
+          image: ${IMAGE_QUOTAMGMT}
+          ports:
+            - { name: grpc, containerPort: 8443 }
+          env:
+            # Listed before QUOTAMGMT_OPTS so the $(...) reference resolves.
+            - name: QUOTAMGMT_DEV_TOKEN
+              valueFrom: { secretKeyRef: { name: quota-secret, key: QUOTAMGMT_DEV_TOKEN } }
+            - name: QUOTAMGMT_OPTS
+              value: "-Dquotamgmt.auth.devAdminToken=$(QUOTAMGMT_DEV_TOKEN)"
+            - name: QUOTAMGMT_PORT
+              valueFrom: { configMapKeyRef: { name: quota-config, key: QUOTAMGMT_PORT } }
+            - name: PGHOST
+              valueFrom: { configMapKeyRef: { name: quota-config, key: PGHOST } }
+            - name: PGPORT
+              valueFrom: { configMapKeyRef: { name: quota-config, key: PGPORT } }
+            - name: PGDATABASE
+              valueFrom: { configMapKeyRef: { name: quota-config, key: PGDATABASE } }
+            - name: PGUSER
+              valueFrom: { configMapKeyRef: { name: quota-config, key: PGUSER } }
+            - name: PGPASSWORD
+              valueFrom: { secretKeyRef: { name: quota-secret, key: PGPASSWORD } }
+          readinessProbe:
+            tcpSocket: { port: 8443 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: { port: 8443 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "250m", memory: "512Mi" }
+            limits: { cpu: "1", memory: "1Gi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quotamgmt
+  namespace: ${NAMESPACE}
+  annotations:
+    # External passthrough network LB (L4) — good for gRPC/HTTP2, no TLS puzzle.
+    cloud.google.com/l4-rbs: "enabled"
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector: { app: quotamgmt }
+  ports:
+    - { name: grpc, port: 8443, targetPort: 8443, protocol: TCP }

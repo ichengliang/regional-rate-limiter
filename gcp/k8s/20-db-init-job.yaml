@@ -1,0 +1,53 @@
+# One-shot Job: load schema/postgres.sql into the private Cloud SQL instance from
+# inside the VPC (the DB has no public IP, so this can't run from a laptop).
+# Idempotent: skips if limit_config already exists. The schema is provided by the
+# quota-schema ConfigMap that deploy.sh creates from ../schema/postgres.sql.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-init
+  namespace: ${NAMESPACE}
+spec:
+  backoffLimit: 4
+  template:
+    metadata:
+      labels:
+        app: db-init
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: db-init
+          image: postgres:16
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              CONN="host=$PGHOST port=$PGPORT dbname=$PGDATABASE user=$PGUSER"
+              until pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE"; do
+                echo "waiting for Cloud SQL..."; sleep 3
+              done
+              if [ "$(psql "$CONN" -tAc "select to_regclass('public.limit_config')" | tr -d '[:space:]')" = "limit_config" ]; then
+                echo "schema already present; nothing to do"
+              else
+                echo "applying schema..."
+                psql -v ON_ERROR_STOP=1 "$CONN" -f /schema/postgres.sql
+                echo "schema applied"
+              fi
+          env:
+            - name: PGHOST
+              valueFrom: { configMapKeyRef: { name: quota-config, key: PGHOST } }
+            - name: PGPORT
+              valueFrom: { configMapKeyRef: { name: quota-config, key: PGPORT } }
+            - name: PGDATABASE
+              valueFrom: { configMapKeyRef: { name: quota-config, key: PGDATABASE } }
+            - name: PGUSER
+              valueFrom: { configMapKeyRef: { name: quota-config, key: PGUSER } }
+            - name: PGPASSWORD
+              valueFrom: { secretKeyRef: { name: quota-secret, key: PGPASSWORD } }
+          volumeMounts:
+            - name: schema
+              mountPath: /schema
+      volumes:
+        - name: schema
+          configMap:
+            name: quota-schema

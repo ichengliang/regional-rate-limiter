@@ -1,0 +1,15 @@
+# Keep the docker build context small & reproducible (contexts build from repo root).
+**/target/
+**/build/
+**/.gradle/
+**/node_modules/
+**/dist/
+**/.git/
+.git/
+.env
+gcp/e2e/gen/
+gcp/e2e/.venv/
+integration/gen/
+integration/.venv/
+integration/.logs/
+**/*.tsbuildinfo

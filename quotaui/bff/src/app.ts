@@ -63,6 +63,19 @@ export function createApp(deps: AppDeps): express.Express {
   });
 
   app.use("/api", api);
+
+  // Serve the built SPA when SPA_DIR is set (container/prod: the BFF is the single
+  // quotaui service, so it also hosts the compiled frontend). Unset in dev/tests,
+  // where Vite serves the SPA and proxies /api here — so this stays a no-op there.
+  const spaDir = process.env.SPA_DIR;
+  if (spaDir) {
+    app.use(express.static(spaDir));
+    // Client-side routing fallback: any non-/api GET returns index.html.
+    app.get(/^(?!\/api\/).*/, (_req, res) => {
+      res.sendFile("index.html", { root: spaDir });
+    });
+  }
+
   app.use(errorMiddleware);
   return app;
 }

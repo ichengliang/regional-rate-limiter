@@ -1,0 +1,7 @@
+# Lower bounds (like integration/requirements.txt) so wheels resolve across
+# Python versions rather than pinning to a build that lacks 3.13/3.14 wheels.
+grpcio>=1.60
+grpcio-tools>=1.60
+protobuf>=4.25
+pytest>=8.0
+requests>=2.31

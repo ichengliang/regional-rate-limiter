@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars and fill in. Only project_id is required.
+project_id = "my-gcp-project"
+region     = "us-central1"
+prefix     = "quota-demo"
+
+# Optional overrides (defaults shown):
+# gke_machine_type = "e2-standard-4"
+# gke_min_nodes    = 1   # per zone; regional cluster => x3
+# gke_max_nodes    = 3   # per zone; headroom for the enforcer HPA (->10 pods)
+# db_tier          = "db-custom-2-7680"
+# redis_memory_gb  = 1

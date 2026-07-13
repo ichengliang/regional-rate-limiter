@@ -1,0 +1,57 @@
+# quotaui — admin console (Node BFF serving its API + the built SPA). 3 replicas,
+# external L4 LoadBalancer on port 80. Dials the two gRPC services in-cluster.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quotaui
+  namespace: ${NAMESPACE}
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: quotaui }
+  template:
+    metadata:
+      labels: { app: quotaui }
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: quotaui }
+      containers:
+        - name: quotaui
+          image: ${IMAGE_QUOTAUI}
+          ports:
+            - { name: http, containerPort: 8080 }
+          env:
+            - name: PORT
+              value: "8080"
+            - name: QUOTAMGMT_ADDR
+              valueFrom: { configMapKeyRef: { name: quota-config, key: QUOTAMGMT_ADDR } }
+            - name: QUOTAENFORCER_ADDR
+              valueFrom: { configMapKeyRef: { name: quota-config, key: QUOTAENFORCER_DIAL_ADDR } }
+            - name: QUOTAMGMT_TOKEN
+              valueFrom: { secretKeyRef: { name: quota-secret, key: QUOTAMGMT_DEV_TOKEN } }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "100m", memory: "128Mi" }
+            limits: { cpu: "500m", memory: "512Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quotaui
+  namespace: ${NAMESPACE}
+spec:
+  type: LoadBalancer
+  selector: { app: quotaui }
+  ports:
+    - { name: http, port: 80, targetPort: 8080, protocol: TCP }

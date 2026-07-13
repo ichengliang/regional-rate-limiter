@@ -1,0 +1,20 @@
+# Non-secret shared config. Values with ${...} are filled by deploy.sh from
+# Terraform outputs (envsubst). Private Cloud SQL / Redis IPs live here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quota-config
+  namespace: ${NAMESPACE}
+data:
+  # --- Postgres (Cloud SQL, private IP) ---
+  PGHOST: "${DB_PRIVATE_IP}"
+  PGPORT: "5432"
+  PGDATABASE: "${DB_NAME}"
+  PGUSER: "${DB_USER}"
+  # --- gRPC ports ---
+  QUOTAMGMT_PORT: "8443"
+  QUOTAENFORCER_ADDR: "0.0.0.0:8444"
+  # --- in-cluster addresses the BFF dials (LB services are also reachable by
+  # their ClusterIP DNS name inside the cluster) ---
+  QUOTAMGMT_ADDR: "quotamgmt:8443"
+  QUOTAENFORCER_DIAL_ADDR: "quotaenforcer:8444"

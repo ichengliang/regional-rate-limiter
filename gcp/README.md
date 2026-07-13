@@ -123,10 +123,19 @@ enforcer HPA is 3→10. HPA scale-up under load is `-m slow` (opt-in).
 If you'd rather set endpoints explicitly, use the `export` lines that
 `scripts/50-endpoints.sh` prints.
 
-### Manual
+### Manual / guided playground
 
-See **[MANUAL_TESTING.md](MANUAL_TESTING.md)** — grpcurl against both gRPC LBs,
-the quotaui console in a browser, and a load-driven HPA demo (`scripts/loadgen.sh`).
+Fastest hands-on tour of the live deployment — a narrated, step-by-step script
+that auto-discovers the endpoints and pauses between steps:
+
+```sh
+cd gcp/scripts
+./demo.sh              # press Enter between steps (DEMO_YES=1 to run straight through)
+```
+
+See **[MANUAL_TESTING.md](MANUAL_TESTING.md)** for the same steps done by hand —
+grpcurl against both gRPC LBs, the quotaui console in a browser, and a load-driven
+HPA demo (`scripts/loadgen.sh`).
 
 ## Tear down
 

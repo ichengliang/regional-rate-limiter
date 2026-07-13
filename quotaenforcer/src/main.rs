@@ -1,88 +1,51 @@
-//! `quotaenforcer` data-plane server (scaffold).
+//! `quotaenforcer` data-plane server entrypoint.
 //!
-//! Stub tonic server implementing `quotaenforcer.v1.RateLimiter`. Every method
-//! currently returns `unimplemented`. The hot-path logic (Redis Lua ops, config
-//! cache, fail-open, sharding, window math) is specified in
-//! `design/quotaenforcer.md` and is NOT implemented here.
+//! Wires the config cache (Postgres) and Redis counter store into the gRPC
+//! `RateLimiter` service and serves it. See `design/quotaenforcer.md`.
 
-use std::net::SocketAddr;
+use std::sync::Arc;
 
-use tonic::{transport::Server, Request, Response, Status};
-
-// Generated code, nested to mirror the proto package paths so the cross-package
-// references (`quotaenforcer.v1` -> `quota.common.v1`) resolve.
-mod quotaenforcer {
-    pub mod v1 {
-        tonic::include_proto!("quotaenforcer.v1");
-    }
-}
-mod quota {
-    pub mod common {
-        pub mod v1 {
-            tonic::include_proto!("quota.common.v1");
-        }
-    }
-}
-
-use quotaenforcer::v1 as pb;
-use pb::rate_limiter_server::{RateLimiter, RateLimiterServer};
-use pb::{
-    CheckQuotaBatchRequest, CheckQuotaBatchResponse, CheckQuotaRequest, CheckQuotaResponse,
-    ChargeRequest, ChargeResponse, GetUsageRequest, GetUsageResponse, RefundRequest, RefundResponse,
-};
-
-#[derive(Default)]
-struct RateLimiterService;
-
-#[tonic::async_trait]
-impl RateLimiter for RateLimiterService {
-    // TODO: implement per design/quotaenforcer.md §3 (request flows) and §4 (Redis).
-    async fn check_quota(
-        &self,
-        _req: Request<CheckQuotaRequest>,
-    ) -> Result<Response<CheckQuotaResponse>, Status> {
-        Err(Status::unimplemented("CheckQuota: see design/quotaenforcer.md §3.1"))
-    }
-
-    async fn check_quota_batch(
-        &self,
-        _req: Request<CheckQuotaBatchRequest>,
-    ) -> Result<Response<CheckQuotaBatchResponse>, Status> {
-        Err(Status::unimplemented("CheckQuotaBatch: see design/quotaenforcer.md §6.4"))
-    }
-
-    async fn charge(
-        &self,
-        _req: Request<ChargeRequest>,
-    ) -> Result<Response<ChargeResponse>, Status> {
-        Err(Status::unimplemented("Charge: see design/quotaenforcer.md §3.2"))
-    }
-
-    async fn refund(
-        &self,
-        _req: Request<RefundRequest>,
-    ) -> Result<Response<RefundResponse>, Status> {
-        Err(Status::unimplemented("Refund: see design/quotaenforcer.md §3.3"))
-    }
-
-    async fn get_usage(
-        &self,
-        _req: Request<GetUsageRequest>,
-    ) -> Result<Response<GetUsageResponse>, Status> {
-        Err(Status::unimplemented("GetUsage: see design/quotaenforcer.md §2.2"))
-    }
-}
+use quotaenforcer::config::ConfigCache;
+use quotaenforcer::pb::rate_limiter_server::RateLimiterServer;
+use quotaenforcer::service::RateLimiterService;
+use quotaenforcer::settings::Settings;
+use quotaenforcer::store::RedisStore;
+use tonic::transport::Server;
+use tracing::info;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr: SocketAddr = std::env::var("QUOTAENFORCER_ADDR")
-        .unwrap_or_else(|_| "0.0.0.0:8444".to_string())
-        .parse()?;
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "quotaenforcer=info,warn".into()),
+        )
+        .init();
 
-    println!("quotaenforcer listening on {addr}");
+    let settings = Settings::from_env()?;
+
+    let store = RedisStore::connect(&settings.redis_url).await?;
+    info!(redis = %settings.redis_url, "connected to counter store");
+
+    let config = Arc::new(ConfigCache::connect(&settings)?);
+    info!(host = %settings.pg_host, db = %settings.pg_database, "config cache pool ready");
+
+    let svc = RateLimiterService::new(store, config, &settings);
+
+    // gRPC server reflection so grpcurl et al. can call methods without local
+    // .proto files.
+    let reflection = tonic_reflection::server::Builder::configure()
+        .register_encoded_file_descriptor_set(quotaenforcer::FILE_DESCRIPTOR_SET)
+        .build_v1()?;
+
+    info!(addr = %settings.listen_addr, "quotaenforcer listening");
     Server::builder()
-        .add_service(RateLimiterServer::new(RateLimiterService))
-        .serve(addr)
+        .add_service(reflection)
+        .add_service(RateLimiterServer::new(svc))
+        .serve_with_shutdown(settings.listen_addr, async {
+            let _ = tokio::signal::ctrl_c().await;
+            info!("shutdown signal received");
+        })
         .await?;
     Ok(())
 }
